@@ -1,0 +1,165 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <DallasTemperature.h>
+#include <OneWire.h>
+#include <Wire.h>
+#include <MPU6050.h>
+
+OneWire oneWire(13); // GPIO pin connected to DS18B20
+DallasTemperature sensors(&oneWire);
+MPU6050 mpu;
+
+const char* ssid = "NEXUS_TECH";
+const char* password = "nex@1234";
+
+const char* serverName = "http://192.168.29.203:5000/test";
+const char* servername = "http://192.168.29.203:5000/check";
+
+unsigned long lastTime = 0;
+unsigned long timerDelay = 1000;
+unsigned long lastTime1 = 0;
+unsigned long timerDelay1 = 1000;
+
+const int echo = 4;
+const int trig = 3;
+const int pulseSensorPin = A0;
+
+int p_pin = 4;
+int pulseValue = 0;
+int pvalue = 0;
+int X = 0, Y = 0;
+int btn = 19;
+int relay = 18;
+int buzzer = 5;
+bool btflag = false;
+
+void setup_wifi() {
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.println("CONNECTING...");
+  }
+  Serial.println("CONNECTED");
+}
+
+void send_data(String A) {
+  if ((millis() - lastTime) > timerDelay) {
+    if (WiFi.status() == WL_CONNECTED) {
+      WiFiClient client;
+      HTTPClient http;
+      http.begin(client, serverName);
+      http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+      int httpResponseCode = http.POST(A);
+      Serial.println(httpResponseCode);
+      if (httpResponseCode > 0) {
+        String res = http.getString();
+        Serial.println(res);
+      }
+      http.end();
+    } else {
+      Serial.println("WiFi Disconnected");
+    }
+    lastTime = millis();
+  }
+}
+
+void senD_data(String A) {
+  if ((millis() - lastTime1) > timerDelay1) {
+    if (WiFi.status() == WL_CONNECTED) {
+      WiFiClient client;
+      HTTPClient http;
+      http.begin(client, servername);
+      http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+      int httpResponseCode = http.POST(A);
+      Serial.println(httpResponseCode);
+      if (httpResponseCode > 0) {
+        String res = http.getString();
+        Serial.println(res);
+      }
+      http.end();
+    } else {
+      Serial.println("WiFi Disconnected");
+    }
+    lastTime1 = millis();
+  }
+}
+
+void setup() {
+  Wire.begin();
+  Serial.begin(9600);
+  mpu.initialize();
+  pinMode(echo, INPUT);
+  pinMode(trig, OUTPUT);
+  pinMode(p_pin, OUTPUT);
+  pinMode(relay, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+  pinMode(btn, INPUT);
+  pinMode(pulseSensorPin, INPUT);
+  setup_wifi();
+}
+
+void loop() {
+  int btval = digitalRead(btn);
+  int16_t ax, ay, az, gx, gy, gz;
+
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  X = ax / 10;
+  Y = ay / 10;
+
+  Serial.print("accelerationX = ");
+  Serial.println(X);
+  Serial.print("accelerationY = ");
+  Serial.println(Y);
+
+  sensors.requestTemperatures();
+  float temperatureCelsius = sensors.getTempCByIndex(0);
+
+  Serial.print("temp: ");
+  Serial.println(temperatureCelsius);
+
+  digitalWrite(p_pin, HIGH);
+  pulseValue = analogRead(pulseSensorPin);
+  digitalWrite(trig, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trig, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trig, LOW);
+
+  long duration = pulseIn(echo, HIGH);
+  int distance = duration * 0.034 / 2;
+  Serial.print("Distance = ");
+  Serial.println(distance);
+
+  if (distance < 20) {
+    digitalWrite(buzzer, HIGH);
+  } else {
+    digitalWrite(buzzer, LOW);
+  }
+
+  if (pulseValue >= 800 && pulseValue <= 1000) {
+    pvalue = map(pulseValue, 0, 4095, 60, 90);
+  } else {
+    pvalue = 0;
+  }
+
+  Serial.println(pvalue);
+  digitalWrite(p_pin, LOW);
+
+  if (btval == 0 && !btflag) {
+    btflag = true;
+  }
+
+  if (btval == 0 && btflag) {
+    btflag = false;
+    senD_data("B");
+  }
+
+  if (X > 1300) {
+    senD_data("A");
+    digitalWrite(relay, HIGH);
+    delay(500);
+    digitalWrite(relay, LOW);
+  }
+
+  send_data(String(temperatureCelsius) + "," + String(pvalue));
+}
