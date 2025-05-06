@@ -1,0 +1,9 @@
+Replace "YOUR_BOT_API_KEY" with your actual Telegram bot token.
+
+Ensure telepot, flask are installed via pip:
+
+pip install flask telepot
+
+Make sure your server's IP (192.168.29.203) is accessible from the ESP32.
+
+Avoid using the same pin numbers for multiple functions.
